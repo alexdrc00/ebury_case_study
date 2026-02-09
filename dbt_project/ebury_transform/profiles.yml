@@ -1,0 +1,12 @@
+ebury_transform:
+  outputs:
+    dev:
+      dbname: airflow
+      host: postgres
+      pass: airflow
+      port: 5432
+      schema: analytics
+      threads: 4
+      type: postgres
+      user: airflow
+  target: dev
