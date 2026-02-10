@@ -1,0 +1,84 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw data layer - minimal transformation from source systems
+    database: analytics
+    schema: raw
+    
+    # Metadata
+    meta:
+      owner: "data-platform-team"
+      contains_pii: true
+    
+    # Source freshness checks
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 48, period: hour}
+    
+    # Loaded data timestamp
+    loaded_at_field: loaded_at
+    
+    tables:
+      - name: customer_transactions
+        description: |
+          Raw customer transaction data loaded from CSV files.
+          Contains unprocessed transaction records with potential data quality issues.
+          
+          Known Issues:
+          - Inconsistent date formats (YYYY-MM-DD, DD-MM-YYYY)
+          - Text values in numeric fields
+          - Missing customer_id and quantity values
+          - Invalid transaction_id prefixes (T1010, T1020, etc.)
+          - Invalid product_id values (P100)
+        
+        # Data quality tests on source
+        tests:
+          - dbt_utils.recency:
+              datepart: day
+              field: loaded_at
+              interval: 2
+        
+        columns:
+          - name: transaction_id
+            description: Unique identifier for each transaction (may have 'T' prefix)
+            tests:
+              - not_null
+          
+          - name: customer_id
+            description: Unique identifier for each customer (has NULL values)
+          
+          - name: transaction_date
+            description: Date when the transaction occurred (multiple formats)
+            tests:
+              - not_null
+          
+          - name: product_id
+            description: Unique identifier for each product (may have 'P' prefix)
+            tests:
+              - not_null
+          
+          - name: product_name
+            description: Name of the product
+            tests:
+              - not_null
+          
+          - name: quantity
+            description: Number of units sold (has NULL and text values)
+          
+          - name: price
+            description: Price of the product (has text values like 'Two Hundred')
+          
+          - name: tax
+            description: Tax applied to the transaction (has text values like 'Fifteen')
+          
+          - name: loaded_at
+            description: Timestamp when the record was loaded into the warehouse
+            tests:
+              - not_null
+          
+          - name: source_file
+            description: Name of the source CSV file
+          
+          - name: pipeline_run_id
+            description: Airflow DAG run identifier for traceability

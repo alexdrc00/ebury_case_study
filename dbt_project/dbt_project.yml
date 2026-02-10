@@ -1,0 +1,97 @@
+name: 'customer_transactions_dw'
+version: '1.0.0'
+config-version: 2
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'customer_transactions_dw'
+
+# These configurations specify where dbt should look for different types of files.
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Model configurations
+models:
+  customer_transactions_dw:
+    # Staging layer - ephemeral or views for transformations
+    staging:
+      +materialized: view
+      +schema: staging
+      +docs:
+        node_color: "#F4A261"
+      +tags:
+        - "staging"
+        - "data_quality"
+    
+    # Mart layer - tables for analytics
+    mart:
+      +materialized: table
+      +schema: mart
+      +docs:
+        node_color: "#2A9D8F"
+      
+      # Dimensions - Type 1 SCD (overwrite)
+      dimensions:
+        +materialized: table
+        +tags:
+          - "dimension"
+          - "mart"
+      
+      # Facts - Partitioned/indexed tables
+      facts:
+        +materialized: table
+        +tags:
+          - "fact"
+          - "mart"
+      
+      # Aggregates - Materialized for performance
+      aggregates:
+        +materialized: table
+        +tags:
+          - "aggregate"
+          - "reporting"
+          - "mart"
+
+# Test configurations
+tests:
+  +store_failures: true
+  +schema: test_results
+
+# Snapshot configurations
+snapshots:
+  +target_schema: snapshots
+  +strategy: timestamp
+  +unique_key: id
+  +updated_at: updated_at
+
+# Variables for flexible configuration
+vars:
+  # Date range for incremental models (if needed later)
+  start_date: '2023-01-01'
+  end_date: '2024-12-31'
+  
+  # Data quality thresholds
+  max_null_percentage: 5
+  min_row_count: 1
+  
+  # Business logic constants
+  default_tax_rate: 0.1
+  default_currency: 'USD'
+
+# Documentation
+docs-paths: ["docs"]
+
+# On-run-start and on-run-end hooks (optional)
+on-run-start:
+  - "{{ log('Starting dbt run: ' ~ target.name, info=True) }}"
+
+on-run-end:
+  - "{{ log('Completed dbt run: ' ~ target.name, info=True) }}"

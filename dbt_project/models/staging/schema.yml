@@ -1,0 +1,212 @@
+version: 2
+
+models:
+  - name: stg_transactions
+    description: |
+      Cleaned and standardized transaction data from raw layer.
+      Handles all data quality issues including:
+      - Inconsistent date formats
+      - Text values in numeric fields
+      - Missing values
+      - Invalid ID prefixes
+      
+      This model serves as the foundation for all downstream analytics.
+    
+    meta:
+      owner: "data-platform-team"
+      layer: "staging"
+    
+    # Model-level tests
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - transaction_id
+            - transaction_date
+    
+    columns:
+      # --- IDENTIFIERS ---
+      - name: transaction_id
+        description: Unique transaction identifier (cleaned, integer)
+        tests:
+          - unique
+          - not_null
+        meta:
+          data_type: "integer"
+      
+      - name: customer_id
+        description: |
+          Customer identifier (cleaned, integer).
+          NULL values indicate transactions without customer assignment.
+        meta:
+          data_type: "integer"
+          known_issues: "Contains NULL values for some transactions"
+      
+      - name: product_id
+        description: Product identifier (cleaned, integer)
+        tests:
+          - not_null
+        meta:
+          data_type: "integer"
+      
+      # --- TIME FIELDS ---
+      - name: transaction_date
+        description: Transaction date (standardized to DATE type)
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= '2023-01-01'"
+              config:
+                severity: warn
+          - dbt_utils.expression_is_true:
+              expression: "<= CURRENT_DATE"
+              config:
+                severity: error
+        meta:
+          data_type: "date"
+      
+      - name: transaction_year
+        description: Year extracted from transaction_date
+        tests:
+          - accepted_values:
+              values: [2023, 2024]
+              quote: false
+      
+      - name: transaction_month
+        description: Month extracted from transaction_date (1-12)
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 12
+              inclusive: true
+      
+      - name: transaction_quarter
+        description: Quarter extracted from transaction_date (1-4)
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 4
+              inclusive: true
+      
+      # --- PRODUCT FIELDS ---
+      - name: product_name
+        description: Product name
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Product A', 'Product B', 'Product C', 'Product D', 'Product E']
+      
+      # --- NUMERIC FIELDS ---
+      - name: quantity
+        description: |
+          Quantity of items purchased.
+          NULL values indicate missing data in source.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 100
+              inclusive: true
+              where: "quantity IS NOT NULL"
+        meta:
+          data_type: "integer"
+          known_issues: "Contains NULL values"
+      
+      - name: price
+        description: |
+          Unit price of the product.
+          Text values from source have been converted or set to NULL.
+        tests:
+          - not_null:
+              where: "transaction_id IS NOT NULL"
+              config:
+                severity: warn
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10000
+              inclusive: true
+              where: "price IS NOT NULL"
+        meta:
+          data_type: "numeric(10,2)"
+      
+      - name: tax
+        description: |
+          Tax amount applied to the transaction.
+          Text values from source have been converted or set to NULL.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1000
+              inclusive: true
+              where: "tax IS NOT NULL"
+        meta:
+          data_type: "numeric(10,2)"
+      
+      - name: line_subtotal
+        description: Calculated field - quantity * price
+        tests:
+          - not_null:
+              where: "quantity IS NOT NULL AND price IS NOT NULL"
+          - dbt_utils.expression_is_true:
+              expression: "= quantity * price"
+              where: "quantity IS NOT NULL AND price IS NOT NULL"
+        meta:
+          data_type: "numeric(10,2)"
+          calculation: "quantity * price"
+      
+      - name: line_total
+        description: Calculated field - line_subtotal + tax
+        tests:
+          - not_null:
+              where: "line_subtotal IS NOT NULL AND tax IS NOT NULL"
+          - dbt_utils.expression_is_true:
+              expression: ">= line_subtotal"
+              where: "line_subtotal IS NOT NULL AND line_total IS NOT NULL"
+        meta:
+          data_type: "numeric(10,2)"
+          calculation: "line_subtotal + tax"
+      
+      # --- DATA QUALITY FLAGS ---
+      - name: had_transaction_id_prefix
+        description: Flag indicating transaction_id had 'T' prefix in source
+        tests:
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_missing_customer_id
+        description: Flag indicating customer_id was NULL in source
+        tests:
+          - accepted_values:
+              values: [true, false]
+      
+      - name: had_invalid_quantity
+        description: Flag indicating quantity was NULL or non-numeric in source
+        tests:
+          - accepted_values:
+              values: [true, false]
+      
+      - name: had_text_in_price
+        description: Flag indicating price contained text in source
+        tests:
+          - accepted_values:
+              values: [true, false]
+      
+      - name: had_text_in_tax
+        description: Flag indicating tax contained text in source
+        tests:
+          - accepted_values:
+              values: [true, false]
+      
+      # --- METADATA ---
+      - name: ingested_at
+        description: Timestamp when record was loaded from source
+        tests:
+          - not_null
+      
+      - name: source_file
+        description: Name of source CSV file
+        tests:
+          - not_null
+      
+      - name: pipeline_run_id
+        description: Airflow DAG run identifier
+        tests:
+          - not_null

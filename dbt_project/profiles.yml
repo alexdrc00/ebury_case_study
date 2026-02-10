@@ -1,0 +1,28 @@
+customer_transactions_dw:
+  target: prod
+  outputs:
+    prod:
+      type: postgres
+      host: postgres
+      user: airflow
+      password: airflow
+      port: 5432
+      dbname: analytics
+      schema: public
+      threads: 4
+      keepalives_idle: 0
+      connect_timeout: 10
+      search_path: public
+      
+    dev:
+      type: postgres
+      host: postgres
+      user: airflow
+      password: airflow
+      port: 5432
+      dbname: analytics
+      schema: public
+      threads: 2
+      keepalives_idle: 0
+      connect_timeout: 10
+      search_path: public

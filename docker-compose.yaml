@@ -14,6 +14,26 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+        - data-platform
+
+  dbt-init:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./dbt_project:/opt/airflow/dbt_project
+    working_dir: /opt/airflow/dbt_project
+    command:
+      - bash
+      - -c
+      - |
+        echo "Installing dbt dependencies..."
+        dbt deps
+        echo "Testing dbt connection..."
+        dbt debug
+    restart: "no"
 
   airflow-init:
     build: .
@@ -26,11 +46,17 @@ services:
         postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AIRFLOW_DB}
       AIRFLOW__CORE__FERNET__KEY: ${AIRFLOW__CORE__FERNET__KEY}
       AIRFLOW__LOAD__EXAMPLES: "False"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      WAREHOUSE_DB: ${WAREHOUSE_DB}
     entrypoint: /bin/bash
     command:
       - -c
       - |
+        # Initialize Airflow DB
         airflow db migrate &&
+
+        # Create admin user
         airflow users create \
           --username ${AIRFLOW_ADMIN_USER} \
           --password ${AIRFLOW_ADMIN_PASSWORD} \
@@ -39,6 +65,29 @@ services:
           --role Admin \
           --email ${ADMIN_EMAIL}
 
+        # Set up Airflow connections
+        echo "Setting up Airflow connections..."
+
+        # Delete existing connections if they exist
+        airflow connections delete postgres_default 2>/dev/null || true
+
+        # Create PostgreSQL connection
+        airflow connections add postgres_default \
+          --conn-type postgres \
+          --conn-host postgres \
+          --conn-port 5432 \
+          --conn-login ${POSTGRES_USER} \
+          --conn-password ${POSTGRES_PASSWORD} \
+          --conn-schema ${WAREHOUSE_DB}
+
+        echo "Airflow initialization complete!"
+
+    volumes:  # Not strictly needed, but good if we wanted sample data or tests
+      - ./dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+    networks:
+      - data-platform
+
   airflow-webserver:
     build: .
     restart: always
@@ -46,11 +95,24 @@ services:
       airflow-init:
         condition: service_completed_successfully
     environment:
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: |-
         postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AIRFLOW_DB}
       AIRFLOW__CORE__FERNET__KEY: ${AIRFLOW__CORE__FERNET__KEY}
       AIRFLOW__LOAD__EXAMPLES: "False"
+
+      # SMTP Config
+      AIRFLOW__SMTP__SMTP_HOST: ${AIRFLOW__SMTP__SMTP_HOST:-localhost}
+      AIRFLOW__SMTP__SMTP_STARTTLS: ${AIRFLOW__SMTP__SMTP_STARTTLS:-True}
+      AIRFLOW__SMTP__SMTP_SSL: ${AIRFLOW__SMTP__SMTP_SSL:-False}
+      AIRFLOW__SMTP__SMTP_PORT: ${AIRFLOW__SMTP__SMTP_PORT:-587}
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: ${AIRFLOW__SMTP__SMTP_MAIL_FROM:-airflow@localhost}
+      AIRFLOW__SMTP__SMTP_USER: ${AIRFLOW__SMTP__SMTP_USER:-}
+      AIRFLOW__SMTP__SMTP_PASSWORD: ${AIRFLOW__SMTP__SMTP_PASSWORD:-}
+
+      # Increase webserver timeout
+      AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: 300
     ports:
       - "8080:8080"
     volumes:
@@ -58,7 +120,15 @@ services:
       - ./dbt_project:/opt/airflow/dbt_project
       - ./logs:/opt/airflow/logs
       - ./data:/opt/airflow/data
+      - ./utils:/opt/airflow/dags/utils
     command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - data-platform
 
   airflow-scheduler:
     build: .
@@ -67,17 +137,39 @@ services:
       airflow-init:
         condition: service_completed_successfully
     environment:
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: |-
         postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${AIRFLOW_DB}
       AIRFLOW__CORE__FERNET__KEY: ${AIRFLOW__CORE__FERNET__KEY}
       AIRFLOW__LOAD__EXAMPLES: "False"
+
+      # SMTP Config
+      AIRFLOW__SMTP__SMTP_HOST: ${AIRFLOW__SMTP__SMTP_HOST:-localhost}
+      AIRFLOW__SMTP__SMTP_STARTTLS: ${AIRFLOW__SMTP__SMTP_STARTTLS:-True}
+      AIRFLOW__SMTP__SMTP_SSL: ${AIRFLOW__SMTP__SMTP_SSL:-False}
+      AIRFLOW__SMTP__SMTP_PORT: ${AIRFLOW__SMTP__SMTP_PORT:-587}
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: ${AIRFLOW__SMTP__SMTP_MAIL_FROM:-airflow@localhost}
+      AIRFLOW__SMTP__SMTP_USER: ${AIRFLOW__SMTP__SMTP_USER:-}
+      AIRFLOW__SMTP__SMTP_PASSWORD: ${AIRFLOW__SMTP__SMTP_PASSWORD:-}
+
+      # Performance Tuning for development
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: 30
+      AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 30
     volumes:
       - ./dags:/opt/airflow/dags
       - ./dbt_project:/opt/airflow/dbt_project
       - ./logs:/opt/airflow/logs
       - ./data:/opt/airflow/data
+      - ./utils:/opt/airflow/dags/utils
     command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname $(hostname)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - data-platform
 
   pgadmin:
     image: dpage/pgadmin4
@@ -88,6 +180,15 @@ services:
       - "5050:80"
     depends_on:
       - postgres
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - data-platform
 
 volumes:
   pgdata:
+  pgadmin-data:
+
+networks:
+  data-platform:
+    driver: bridge
