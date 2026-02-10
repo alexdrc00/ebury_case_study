@@ -115,6 +115,7 @@ services:
       AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: 300
     ports:
       - "8080:8080"
+      - "8081:8081"
     volumes:
       - ./dags:/opt/airflow/dags
       - ./dbt_project:/opt/airflow/dbt_project
