@@ -9,9 +9,9 @@
 ## 📋 Table of Contents
 
 - [Overview](#overview)
+- [Quick Start](#quick-start)
 - [Architecture](#architecture)
 - [Key Features](#key-features)
-- [Quick Start](#quick-start)
 - [Data Model](#data-model)
 - [Quality Framework](#quality-framework)
 - [Project Structure](#project-structure)
@@ -25,7 +25,7 @@
 
 ---
 
-## Overview
+## 🎯 Overview
 
 This project implements a production-grade data pipeline that:
 - Ingests customer transaction data from CSV
@@ -35,17 +35,83 @@ This project implements a production-grade data pipeline that:
 
 ---
 
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Docker Desktop or Docker + Docker Compose
+- 4GB+ RAM available
+- 5GB+ disk space
+
+### Installation
+
+```bash
+# 1. Clone repository
+git clone 
+cd customer-transactions-platform
+
+# 2. Create environment file
+cp .env.example .env
+# Edit .env if needed
+
+# 3. Start services
+docker-compose up -d
+
+# 4. Wait for services to be healthy (~1 minute)
+docker-compose ps
+"
+```
+
+### First Run
+
+```bash
+# Access Airflow UI
+open http://localhost:8080
+# Login: admin / admin
+
+# Enable and trigger the DAG
+# 1. Find: customer_transactions_pipeline
+# 2. Toggle to ON
+# 3. Monitor execution (~2 minutes)
+```
+
+### Verify Success
+
+```bash
+# Run verification queries -- See test_queries.sql
+
+# Option 1: execute the queries with the psql client
+docker-compose exec postgres psql -U airflow -d analytics
+
+# Option 2: access pgadmin for a GUI
+open localhost:5050
+# Explore DB and Schemas and use the Query Tool on the Analytics DB
+```
+
+### View dbt Documentation
+
+```bash
+docker-compose exec airflow-webserver bash -c "
+  cd /opt/airflow/dbt_project
+  dbt docs generate
+  dbt docs serve --host 0.0.0.0 --port 8081
+"
+open http://localhost:8081
+```
+
+---
+
 ## 🏗️ Architecture
 
 ### Technology Stack
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| Orchestration | Apache Airflow 2.x | Workflow management |
+| Orchestration | Apache Airflow 2.9.3 | Workflow management |
 | Transformation | dbt 1.8.x | SQL-based transformations |
-| Database | PostgreSQL 16 | Data warehouse |
+| Database | PostgreSQL 13 | Data warehouse |
 | Containerization | Docker Compose | Environment management |
-| Language | Python 3.12 | Pipeline logic |
+| Language | Python 3.x | Pipeline logic |
 
 ### Data Flow
 
@@ -127,72 +193,6 @@ This project implements a production-grade data pipeline that:
 
 ---
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Docker Desktop or Docker + Docker Compose
-- 4GB+ RAM available
-- 5GB+ disk space
-
-### Installation
-
-```bash
-# 1. Clone repository
-git clone 
-cd customer-transactions-platform
-
-# 2. Create environment file
-cp .env.example .env
-# Edit .env if needed (defaults work fine)
-
-# 3. Start services
-docker-compose up -d
-
-# 4. Wait for services to be healthy (~1 minute)
-docker-compose ps
-
-# 5. Install dbt dependencies
-docker-compose exec airflow-webserver bash -c "
-  cd /opt/airflow/dbt_project && dbt deps
-"
-```
-
-### First Run
-
-```bash
-# Access Airflow UI
-open http://localhost:8080
-# Login: admin / admin
-
-# Enable and trigger the DAG
-# 1. Find: customer_transactions_pipeline
-# 2. Toggle to ON
-# 3. Click "Trigger DAG"
-# 4. Monitor execution (~5 minutes)
-```
-
-### Verify Success
-
-```bash
-# Check data in PostgreSQL
-docker-compose exec postgres psql -U airflow -d analytics
-
-# Run verification queries
-SELECT 'raw' as layer, COUNT(*) FROM raw.customer_transactions
-UNION ALL
-SELECT 'staging', COUNT(*) FROM staging.stg_transactions
-UNION ALL
-SELECT 'fact', COUNT(*) FROM mart.fact_transactions;
-
-# Expected:
-# raw      | 100
-# staging  | ~95
-# fact     | ~92
-```
-
----
-
 ## 📐 Data Model
 
 ### Dimensional Model (Star Schema)
@@ -217,7 +217,7 @@ dim_customers─┼─fact_transactions─dim_products
 | `monthly_customer_summary` | Aggregate | Customer-month | ~20 |
 | `product_performance` | Aggregate | Product-day | ~125 |
 
-### Sample Queries
+### Sample Queries for Business Insights
 
 ```sql
 -- Top customers by revenue
@@ -279,113 +279,6 @@ These are tracked in `data_quality_score` and flagged for reporting.
 
 ---
 
-## 📁 Project Structure
-
-```
-customer-transactions-platform/
-├── dags/
-│   ├── customer_transactions_pipeline.py  # Main DAG
-│   └── utils/
-│       ├── __init__.py                    # Package marker
-│       └── db_utils.py                    # Platform utilities
-│
-├── dbt_project/
-│   ├── dbt_project.yml                    # dbt config
-│   ├── profiles.yml                       # DB connection
-│   ├── packages.yml                       # Dependencies
-│   │
-│   └── models/
-│       ├── sources.yml                    # Raw sources
-│       │
-│       ├── staging/
-│       │   ├── stg_transactions.sql       # Staging model
-│       │   └── schema.yml                 # Staging tests
-│       │
-│       └── mart/
-│           ├── dimensions/                # Dimension tables
-│           │   ├── dim_customers.sql
-│           │   ├── dim_products.sql
-│           │   └── dim_dates.sql
-│           │
-│           ├── facts/                     # Fact tables
-│           │   └── fact_transactions.sql
-│           │
-│           ├── aggregates/                # Aggregate tables
-│           │   ├── monthly_customer_summary.sql
-│           │   └── product_performance.sql
-│           │
-│           └── schema.yml                 # Mart tests
-│
-├── data/
-│   └── customer_transactions.csv          # Source data
-│
-├── postgres-init/
-│   ├── 01-create-analytics-db.sql         # DB setup
-│   └── 02-create-schemas.sql              # Schema creation
-│
-├── docker-compose.yaml                     # Service orchestration
-├── Dockerfile                              # Airflow image
-├── .env.example                            # Environment template
-└── README.md                               # This file
-```
-
----
-
-## 💻 Usage Examples
-
-### Run Pipeline Manually
-
-```bash
-# Trigger via Airflow UI (recommended)
-# OR via CLI:
-docker-compose exec airflow-webserver \
-  airflow dags trigger customer_transactions_pipeline
-```
-
-### Run dbt Models Manually
-
-```bash
-docker-compose exec airflow-webserver bash -c "
-  cd /opt/airflow/dbt_project
-  
-  # Run all models
-  dbt run
-  
-  # Run only staging
-  dbt run --models staging
-  
-  # Run only dimensions
-  dbt run --models mart.dimensions
-  
-  # Run tests
-  dbt test
-"
-```
-
-### Query Data
-
-```bash
-# Via psql
-docker-compose exec postgres psql -U airflow -d analytics
-
-# Via pgAdmin
-open http://localhost:5050
-# Login: aledrc00@gmail.com / admin
-```
-
-### View dbt Documentation
-
-```bash
-docker-compose exec airflow-webserver bash -c "
-  cd /opt/airflow/dbt_project
-  dbt docs generate
-  dbt docs serve --port 8081
-"
-open http://localhost:8081
-```
-
----
-
 ## 🧪 Testing
 
 ### Test Coverage
@@ -393,24 +286,6 @@ open http://localhost:8081
 - **dbt Tests:** 130+ automated tests
 - **Quality Checks:** 26+ validations
 - **Coverage:** 100% of critical columns
-
-### Run Tests
-
-```bash
-# All tests
-docker-compose exec airflow-webserver bash -c "
-  cd /opt/airflow/dbt_project && dbt test
-"
-
-# Staging only
-dbt test --models staging
-
-# Mart only
-dbt test --models mart
-
-# Specific model
-dbt test --models dim_customers
-```
 
 ### Test Types
 
@@ -428,8 +303,8 @@ dbt test --models dim_customers
 ### Airflow UI
 
 - DAG runs: http://localhost:8080
-- Task logs: Click task → Logs
-- XCom data: Click task → XCom
+- Task logs: DAG -> Task -> Logs
+- XCom data: DAG -> Task -> XCom
 
 ### Quality Reports
 
@@ -438,7 +313,7 @@ Stored in XCom after each run:
 - `staging_quality_results`: Staging metrics
 - `mart_quality_results`: Mart metrics
 
-### Logs
+### Additional Logs
 
 ```bash
 # View Airflow logs
@@ -543,39 +418,8 @@ docker-compose logs postgres
 
 ---
 
-## 🤝 Contributing
-
-This is a case study project, but feedback is welcome!
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
----
-
-## 📝 License
-
-This project is created for educational purposes as part of a case study.
-
----
-
-## 👤 Author
-
-**[Your Name]**
-
-Senior Data Engineer Case Study - Ebury
-[Your Contact Information]
-
----
-
 ## 🙏 Acknowledgments
 
-- Built for Ebury Senior Data Engineer (Platform) role
-- Demonstrates production-grade data platform engineering
-- Showcases modern data stack best practices
+- Ebury for providing the chance to take on this case study
 
 ---
-
-**⭐ If you found this interesting, please star the repository!**
