@@ -211,6 +211,10 @@ dim_customers─┼─fact_transactions─dim_products
 - Task logs: DAG -> Task -> Logs
 - XCom data: DAG -> Task -> XCom
 
+### PGAdmin
+
+- Queries and Data model: localhost:5050
+
 ### Quality Reports
 
 Stored in XCom after each run:
