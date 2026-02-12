@@ -30,6 +30,11 @@ SELECT
     SUM(CASE WHEN is_clean_record THEN 1 ELSE 0 END) as clean_records,
     SUM(CASE WHEN had_text_in_price THEN 1 ELSE 0 END) as had_text_in_price,
     SUM(CASE WHEN is_missing_customer_id THEN 1 ELSE 0 END) as missing_customer,
+    SUM(CASE WHEN had_transaction_id_prefix THEN 1 ELSE 0 END) as had_transaction_id_prefix,
+    SUM(CASE WHEN had_invalid_date IS TRUE THEN 1 ELSE 0 END) as had_invalid_date,
+	SUM(CASE WHEN had_product_id_prefix THEN 1 ELSE 0 END) as had_product_id_prefix,
+    SUM(CASE WHEN had_invalid_quantity THEN 1 ELSE 0 END) as had_invalid_quantity,
+    SUM(CASE WHEN had_text_in_tax THEN 1 ELSE 0 END) as had_text_in_tax,
     ROUND(100.0 * SUM(CASE WHEN is_clean_record THEN 1 ELSE 0 END) / COUNT(*), 2) as clean_percentage
 FROM mart.fact_transactions;
 
