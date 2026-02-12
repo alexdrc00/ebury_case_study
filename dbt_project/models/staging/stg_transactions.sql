@@ -13,9 +13,9 @@
     - Handle data quality issues (nulls, format inconsistencies, type conversions)
     - Prepare data for dimensional modeling
     
-    Data Quality Fixes:
+    Data Quality Fixes -- Preserve NULLs for tracking:
     1. Transaction ID: Remove 'T' prefix, convert to integer
-    2. Customer ID: Convert to integer, preserve NULLs for tracking
+    2. Customer ID: Convert to integer, handle floats
     3. Transaction Date: Standardize multiple date formats to DATE type
     4. Product ID: Remove 'P' prefix, convert to integer
     5. Quantity: Convert to integer, preserve NULLs
@@ -30,142 +30,163 @@ WITH source AS (
     SELECT * FROM {{ source('raw', 'customer_transactions') }}
 ),
 
+flagged AS (
+	-- DATA QUALITY FLAGS
+        SELECT
+		transaction_id AS raw_transaction_id,
+		customer_id AS raw_customer_id,
+		transaction_date AS raw_transaction_date,
+		product_id AS raw_product_id,
+		product_name AS raw_product_name,
+		quantity AS raw_quantity,
+		price AS raw_price,
+		tax AS raw_tax,
+		ingested_at AS raw_ingested_at,
+		source_file AS raw_source_file,
+                pipeline_run_id AS raw_pipeline_run_id,
+
+		-- Transaction ID issues
+		CASE
+			WHEN transaction_id IS NULL OR TRIM(transaction_id) = '' THEN TRUE
+			ELSE FALSE
+		END AS is_missing_transaction_id,
+		CASE
+			WHEN transaction_id ~ '^T[0-9]+$' THEN TRUE
+			ELSE FALSE
+		END AS had_transaction_id_prefix,
+
+		-- Customer ID issues
+		CASE
+			WHEN customer_id IS NULL OR TRIM(customer_id) = '' THEN TRUE
+			ELSE FALSE
+		END AS is_missing_customer_id,
+
+		-- Date Issues
+		CASE
+			WHEN transaction_date IS NULL OR TRIM(transaction_date) = '' THEN TRUE
+			ELSE FALSE
+		END AS is_missing_transaction_date,
+		CASE
+			WHEN transaction_date IS NOT NULL
+			AND (
+				(transaction_date ~ '^\d{4}-\d{2}-\d{2}$' AND try_cast_date(transaction_date, 'YYYY-MM-DD') IS NULL)
+				OR (transaction_date ~ '^\d{2}-\d{2}-\d{4}$' AND try_cast_date(transaction_date, 'DD-MM-YYYY') IS NULL)
+				OR (transaction_date !~ '^\d{4}-\d{2}-\d{2}$' OR transaction_date !~ '^\d{2}-\d{2}-\d{4}$')
+			)
+			THEN TRUE
+			ELSE FALSE
+		END AS had_invalid_date,
+
+		-- Product Issues
+		CASE
+			WHEN product_id ~ '^P[0-9]+$' THEN TRUE
+			ELSE FALSE
+		END AS had_product_id_prefix,
+
+		-- Qty Issues
+		CASE
+			WHEN quantity IS NULL OR TRIM(quantity) = '' THEN TRUE
+			WHEN NOT quantity ~ '^[0-9]+\.?[0-9]*$' THEN TRUE
+			ELSE FALSE
+		END AS had_invalid_quantity,
+
+		-- Price Issues
+		CASE
+		    WHEN price ~ '[A-Za-z]' THEN TRUE
+		    ELSE FALSE
+		END AS had_text_in_price,
+
+		-- Tax Issues
+		CASE
+		    WHEN tax ~ '[A-Za-z]' THEN TRUE
+		    ELSE FALSE
+		END AS had_text_in_tax
+	FROM source
+),
+
 cleaned AS (
     SELECT
-        -- ================================================================
+	*,
         -- TRANSACTION IDENTIFIER
         -- Fix: Remove 'T' prefix from transaction IDs like 'T1010'
-        -- ================================================================
         CASE 
-            WHEN transaction_id IS NULL THEN NULL
-            WHEN transaction_id ~ '^[0-9]+$' THEN transaction_id::INTEGER
-            WHEN transaction_id ~ '^T[0-9]+$' THEN SUBSTRING(transaction_id FROM 2)::INTEGER
+            WHEN raw_transaction_id IS NULL THEN NULL
+            WHEN raw_transaction_id ~ '^[0-9]+$' THEN raw_transaction_id::INTEGER
+            WHEN raw_transaction_id ~ '^T[0-9]+$' THEN SUBSTRING(raw_transaction_id FROM 2)::INTEGER
             ELSE NULL  -- Invalid format, set to NULL for data quality tracking
         END AS transaction_id,
         
-        -- ================================================================
         -- CUSTOMER IDENTIFIER
-        -- Fix: Convert string to integer, preserve NULLs for orphan tracking
-        -- ================================================================
+        -- Fix: Convert string to integer, handle floats, preserve NULLs for orphan tracking
         CASE 
-            WHEN customer_id IS NULL OR TRIM(customer_id) = '' THEN NULL
-            WHEN customer_id ~ '^[0-9]+\.?[0-9]*$' THEN SPLIT_PART(customer_id, '.', 1)::INTEGER
+            WHEN raw_customer_id IS NULL OR TRIM(raw_customer_id) = '' THEN NULL
+            WHEN raw_customer_id ~ '^[0-9]+\.?[0-9]*$' THEN SPLIT_PART(raw_customer_id, '.', 1)::INTEGER
             ELSE NULL
         END AS customer_id,
         
-        -- ================================================================
         -- TRANSACTION DATE
         -- Fix: Standardize multiple date formats
-        -- Formats: YYYY-MM-DD, DD-MM-YYYY
-        -- ================================================================
+        -- Allowed Formats: YYYY-MM-DD, DD-MM-YYYY
         CASE 
-            -- Format: YYYY-MM-DD (e.g., 2023-07-11)
-            WHEN transaction_date ~ '^\d{4}-\d{2}-\d{2}$' THEN 
-                transaction_date::DATE
+            -- Format: YYYY-MM-DD
+            WHEN raw_transaction_date ~ '^\d{4}-\d{2}-\d{2}$' THEN 
+                try_cast_date(raw_transaction_date, 'YYYY-MM-DD')
             
-            -- Format: DD-MM-YYYY (e.g., 18-07-2023)
-            WHEN transaction_date ~ '^\d{2}-\d{2}-\d{4}$' THEN 
-                TO_DATE(transaction_date, 'DD-MM-YYYY')
+            -- Format: DD-MM-YYYY
+            WHEN raw_transaction_date ~ '^\d{2}-\d{2}-\d{4}$' THEN 
+                try_cast_date(raw_transaction_date, 'DD-MM-YYYY')
             
             ELSE NULL  -- Invalid format
         END AS transaction_date,
         
-        -- ================================================================
         -- PRODUCT IDENTIFIER
         -- Fix: Remove 'P' prefix from product IDs like 'P100'
-        -- ================================================================
         CASE 
-            WHEN product_id IS NULL THEN NULL
-            WHEN product_id ~ '^[0-9]+$' THEN product_id::INTEGER
-            WHEN product_id ~ '^P[0-9]+$' THEN SUBSTRING(product_id FROM 2)::INTEGER
+            WHEN raw_product_id IS NULL THEN NULL
+            WHEN raw_product_id ~ '^[0-9]+$' THEN raw_product_id::INTEGER
+            WHEN raw_product_id ~ '^P[0-9]+$' THEN SUBSTRING(raw_product_id FROM 2)::INTEGER
             ELSE NULL
         END AS product_id,
         
-        -- ================================================================
         -- PRODUCT NAME
         -- Clean: Trim whitespace, standardize casing
-        -- ================================================================
-        TRIM(product_name) AS product_name,
+        UPPER(TRIM(raw_product_name)) AS product_name,
         
-        -- ================================================================
         -- QUANTITY
-        -- Fix: Convert to integer, handle NULLs and text values
-        -- ================================================================
+        -- Fix: Convert to integer, handle floats and text values
         CASE 
-            WHEN quantity IS NULL OR TRIM(quantity) = '' THEN NULL
-            WHEN quantity ~ '^[0-9]+\.?[0-9]*$' THEN SPLIT_PART(quantity, '.', 1)::INTEGER
-            ELSE NULL  -- Text values like 'Two Hundred' → NULL
+            WHEN raw_quantity IS NULL OR TRIM(raw_quantity) = '' THEN NULL
+            WHEN raw_quantity ~ '^[0-9]+\.?[0-9]*$' THEN SPLIT_PART(raw_quantity, '.', 1)::INTEGER
+            ELSE try_cast_numeric(raw_quantity)::INTEGER  -- Final safety net
         END AS quantity,
-        
-        -- ================================================================
+         
         -- PRICE
         -- Fix: Handle text values like 'Two Hundred', convert to numeric
-        -- ================================================================
         CASE 
-            WHEN price IS NULL OR TRIM(price) = '' THEN NULL
-            WHEN price ~ '^[0-9]+\.?[0-9]*$' THEN price::NUMERIC(10,2)
-            -- Map known text values to numbers
-            WHEN LOWER(TRIM(price)) = 'two hundred' THEN 200.00
-            ELSE NULL
+            WHEN raw_price IS NULL OR TRIM(raw_price) = '' THEN NULL
+            WHEN raw_price ~ '^[0-9]+\.?[0-9]*$' THEN raw_price::NUMERIC(10,2)
+            ELSE try_cast_numeric(raw_price)  -- Final safety net
         END AS price,
-        
-        -- ================================================================
+         
         -- TAX
-        -- Fix: Handle text values like 'Fifteen', convert to numeric
-        -- ================================================================
+        -- Fix: Handle text values, convert to numeric 
         CASE 
-            WHEN tax IS NULL OR TRIM(tax) = '' THEN NULL
-            WHEN tax ~ '^[0-9]+\.?[0-9]*$' THEN tax::NUMERIC(10,2)
-            -- Map known text values to numbers
-            WHEN LOWER(TRIM(tax)) = 'fifteen' THEN 15.00
-            ELSE NULL
+            WHEN raw_tax IS NULL OR TRIM(raw_tax) = '' THEN NULL
+            WHEN raw_tax ~ '^[0-9]+\.?[0-9]*$' THEN raw_tax::NUMERIC(10,2)
+            ELSE try_cast_numeric(raw_tax)  -- Final safety net
         END AS tax,
         
-        -- ================================================================
         -- METADATA FIELDS
         -- Preserve for traceability and debugging
-        -- ================================================================
-        ingested_at,
-        source_file,
-        pipeline_run_id,
+        raw_ingested_at AS ingested_at,
+        raw_source_file AS source_file,
+        raw_pipeline_run_id AS pipeline_run_id
         
-        -- ================================================================
-        -- DATA QUALITY FLAGS
-        -- Track which records had issues for monitoring
-        -- ================================================================
-        CASE 
-            WHEN transaction_id ~ '^T[0-9]+$' THEN TRUE
-            ELSE FALSE
-        END AS had_transaction_id_prefix,
-        
-        CASE 
-            WHEN customer_id IS NULL OR TRIM(customer_id) = '' THEN TRUE
-            ELSE FALSE
-        END AS is_missing_customer_id,
-        
-        CASE 
-            WHEN quantity IS NULL OR TRIM(quantity) = '' THEN TRUE
-            WHEN NOT quantity ~ '^[0-9]+\.?[0-9]*$' THEN TRUE
-            ELSE FALSE
-        END AS had_invalid_quantity,
-        
-        CASE 
-            WHEN price ~ '[A-Za-z]' THEN TRUE
-            ELSE FALSE
-        END AS had_text_in_price,
-        
-        CASE 
-            WHEN tax ~ '[A-Za-z]' THEN TRUE
-            ELSE FALSE
-        END AS had_text_in_tax
-
-    FROM source
+    FROM flagged
 ),
 
--- ================================================================
 -- CALCULATED FIELDS
 -- Add derived business fields
--- ================================================================
 enriched AS (
     SELECT
         *,

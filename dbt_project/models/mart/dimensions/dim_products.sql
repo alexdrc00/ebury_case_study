@@ -76,9 +76,9 @@ final AS (
         
         -- Product category (derived from name pattern)
         CASE 
-            WHEN product_name IN ('Product A', 'Product B') THEN 'Category 1'
-            WHEN product_name IN ('Product C', 'Product D') THEN 'Category 2'
-            ELSE 'Category 3'
+            WHEN product_name IN ('PRODUCT A', 'PRODUCT B') THEN 'CATEGORY 1'
+            WHEN product_name IN ('PRODUCT C', 'PRODUCT D') THEN 'CATEGORY 2'
+            ELSE 'CATEGORY 3'
         END AS product_category,
         
         -- Sales metrics

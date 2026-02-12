@@ -4,11 +4,11 @@ customer_transactions_dw:
     prod:
       type: postgres
       host: postgres
-      user: airflow
-      password: airflow
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
       port: 5432
-      dbname: analytics
-      schema: analytics
+      dbname: "{{ env_var('WAREHOUSE_DB') }}"
+      schema: "{{ env_var('WAREHOUSE_DB') }}"
       threads: 4
       keepalives_idle: 0
       connect_timeout: 10
@@ -17,11 +17,11 @@ customer_transactions_dw:
     dev:
       type: postgres
       host: postgres
-      user: airflow
-      password: airflow
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
       port: 5432
-      dbname: analytics
-      schema: analytics
+      dbname: "{{ env_var('WAREHOUSE_DB') }}"
+      schema: "{{ env_var('WAREHOUSE_DB') }}"
       threads: 2
       keepalives_idle: 0
       connect_timeout: 10

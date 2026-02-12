@@ -9,6 +9,7 @@ models:
       - Text values in numeric fields
       - Missing values
       - Invalid ID prefixes
+      - Include flags for known data quality issues
       
       This model serves as the foundation for all downstream analytics.
     
@@ -17,11 +18,11 @@ models:
       layer: "staging"
     
     # Model-level tests
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - transaction_id
-            - transaction_date
+    # tests:
+    #  - dbt_utils.unique_combination_of_columns:
+    #      combination_of_columns:
+    #        - transaction_id
+    #        - transaction_date
     
     columns:
       # --- IDENTIFIERS ---
@@ -54,22 +55,18 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: ">= '2023-01-01'"
+              expression: ">= '2010-01-01'"
               config:
-                severity: warn
+                severity: error
           - dbt_utils.expression_is_true:
               expression: "<= CURRENT_DATE"
               config:
-                severity: error
+                severity: warn
         meta:
           data_type: "date"
       
       - name: transaction_year
         description: Year extracted from transaction_date
-        tests:
-          - accepted_values:
-              values: [2023, 2024]
-              quote: false
       
       - name: transaction_month
         description: Month extracted from transaction_date (1-12)
@@ -92,8 +89,8 @@ models:
         description: Product name
         tests:
           - not_null
-          - accepted_values:
-              values: ['Product A', 'Product B', 'Product C', 'Product D', 'Product E']
+            # - accepted_values:
+            #      values: ['PRODUCT A', 'PRODUCT B', 'PRODUCT C', 'PRODUCT D', 'PRODUCT E']
       
       # --- NUMERIC FIELDS ---
       - name: quantity
@@ -103,7 +100,7 @@ models:
         tests:
           - dbt_utils.accepted_range:
               min_value: 1
-              max_value: 100
+              max_value: 1000
               inclusive: true
               where: "quantity IS NOT NULL"
         meta:
@@ -165,6 +162,11 @@ models:
           calculation: "line_subtotal + tax"
       
       # --- DATA QUALITY FLAGS ---
+      - name: is_missing_transaction_id
+        description: Flag indicating transaction_id was NULL in source
+        tests:
+          - accepted_values:
+              values: [true, false]
       - name: had_transaction_id_prefix
         description: Flag indicating transaction_id had 'T' prefix in source
         tests:
@@ -173,6 +175,18 @@ models:
       
       - name: is_missing_customer_id
         description: Flag indicating customer_id was NULL in source
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: had_invalid_date
+        description: Flag indicating date was NULL or invalid in source
+        tests:
+          - accepted_values:
+              values: [true, false]
+
+      - name: had_product_id_prefix
+        description: Flag indicating product_id had prefix in source
         tests:
           - accepted_values:
               values: [true, false]

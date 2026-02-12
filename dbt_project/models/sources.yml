@@ -17,7 +17,7 @@ sources:
       error_after: {count: 48, period: hour}
     
     # Loaded data timestamp
-    loaded_at_field: loaded_at
+    loaded_at_field: ingested_at
     
     tables:
       - name: customer_transactions
@@ -36,7 +36,7 @@ sources:
         tests:
           - dbt_utils.recency:
               datepart: day
-              field: loaded_at
+              field: ingested_at
               interval: 2
         
         columns:
@@ -72,7 +72,7 @@ sources:
           - name: tax
             description: Tax applied to the transaction (has text values like 'Fifteen')
           
-          - name: loaded_at
+          - name: ingested_at
             description: Timestamp when the record was loaded into the warehouse
             tests:
               - not_null

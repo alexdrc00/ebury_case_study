@@ -81,6 +81,8 @@ vars:
   # Data quality thresholds
   max_null_percentage: 5
   min_row_count: 1
+  min_date: '1900-01-01'
+  max_years_ahead: 10
   
   # Business logic constants
   default_tax_rate: 0.1
@@ -92,6 +94,7 @@ docs-paths: ["docs"]
 # On-run-start and on-run-end hooks (optional)
 on-run-start:
   - "{{ log('Starting dbt run: ' ~ target.name, info=True) }}"
+  - "{{ create_udfs() }}"
 
 on-run-end:
   - "{{ log('Completed dbt run: ' ~ target.name, info=True) }}"

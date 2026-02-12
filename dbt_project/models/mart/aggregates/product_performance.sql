@@ -118,19 +118,19 @@ with_rolling_metrics AS (
         AVG(total_revenue) OVER (
             PARTITION BY product_key 
             ORDER BY date_key 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+            RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW
         ) AS revenue_7day_avg,
         
         AVG(total_quantity) OVER (
             PARTITION BY product_key 
             ORDER BY date_key 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+            RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW
         ) AS quantity_7day_avg,
         
         AVG(transaction_count) OVER (
             PARTITION BY product_key 
             ORDER BY date_key 
-            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+            RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW
         ) AS transaction_count_7day_avg,
         
         -- Rank products by revenue within each day

@@ -40,6 +40,8 @@ WITH transactions AS (
         had_transaction_id_prefix,
         is_missing_customer_id,
         had_invalid_quantity,
+	had_invalid_date,
+	had_product_id_prefix,
         had_text_in_price,
         had_text_in_tax,
         
@@ -49,32 +51,26 @@ WITH transactions AS (
         pipeline_run_id
         
     FROM {{ ref('stg_transactions') }}
-    WHERE transaction_id IS NOT NULL  -- Only include valid transactions
+    WHERE
+	transaction_id IS NOT NULL  -- Only include valid transactions
+	AND product_id IS NOT NULL
+        AND transaction_date IS NOT NULL
+	AND line_total IS NOT NULL
 ),
 
 final AS (
     SELECT
-        -- ================================================================
         -- PRIMARY KEY
-        -- ================================================================
         t.transaction_id,
         
-        -- ================================================================
         -- FOREIGN KEYS (Dimension References)
-        -- ================================================================
         COALESCE(t.customer_id, -1) AS customer_key,  -- FK to dim_customers
         t.product_id AS product_key,                  -- FK to dim_products
         t.transaction_date AS date_key,               -- FK to dim_dates
         
-        -- ================================================================
         -- DEGENERATE DIMENSIONS (Low-cardinality attributes)
-        -- ================================================================
         t.product_name,
-        
-        -- ================================================================
-        -- MEASURES (Numeric facts for aggregation)
-        -- ================================================================
-        
+                 
         -- Quantity measures
         COALESCE(t.quantity, 0) AS quantity,
         
@@ -87,25 +83,26 @@ final AS (
         COALESCE(t.line_total, 0) AS line_total,
         
         -- Calculated measures
-        CASE 
-            WHEN t.price > 0 THEN ROUND((t.tax / t.price) * 100, 2)
-            ELSE NULL
-        END AS tax_rate_percentage,
-        
-        CASE 
-            WHEN t.line_subtotal > 0 THEN ROUND((t.tax / t.line_subtotal) * 100, 2)
-            ELSE NULL
-        END AS effective_tax_rate,
-        
+        -- CASE 
+        --    WHEN t.price > 0 THEN ROUND((t.tax / t.price) * 100, 2)
+        --    ELSE NULL
+        -- END AS tax_rate_percentage,
+        ROUND((t.tax / t.price) * 100, 2) AS tax_rate_percentage,
+
+        -- CASE 
+        --    WHEN t.line_subtotal > 0 THEN ROUND((t.tax / t.line_subtotal) * 100, 2)
+        --    ELSE NULL
+        -- END AS effective_tax_rate,
+        ROUND((t.tax / t.line_subtotal) * 100, 2) AS effective_tax_rate,
+
         -- Profit proxy (assuming fixed cost structure)
-        CASE 
-            WHEN t.line_subtotal > 0 THEN t.line_subtotal * 0.3  -- 30% margin assumption
-            ELSE NULL
-        END AS estimated_margin,
-        
-        -- ================================================================
+        -- CASE 
+        --    WHEN t.line_subtotal > 0 THEN t.line_subtotal * 0.3  -- 30% margin assumption
+        --    ELSE NULL
+        -- END AS estimated_margin,
+        t.line_subtotal * 0.3 AS estimated_margin,
+
         -- BUSINESS FLAGS (Boolean indicators for analysis)
-        -- ================================================================
         t.is_bulk_purchase,
         
         CASE 
@@ -128,19 +125,22 @@ final AS (
             ELSE FALSE
         END AS is_high_value_transaction,
         
-        -- ================================================================
         -- DATA QUALITY FLAGS (For monitoring)
-        -- ================================================================
+        
         t.had_transaction_id_prefix,
         t.is_missing_customer_id,
+	t.had_invalid_date,
+	t.had_product_id_prefix,
         t.had_invalid_quantity,
         t.had_text_in_price,
         t.had_text_in_tax,
         
-        -- Overall data quality score (0-5, where 5 is perfect)
-        (5 -
+        -- Overall data quality score (0-7, where 7 is perfect)
+        (7 -
             CASE WHEN t.had_transaction_id_prefix THEN 1 ELSE 0 END -
             CASE WHEN t.is_missing_customer_id THEN 1 ELSE 0 END -
+	    CASE WHEN t.had_invalid_date THEN 1 ELSE 0 END -
+            CASE WHEN t.had_product_id_prefix THEN 1 ELSE 0 END -
             CASE WHEN t.had_invalid_quantity THEN 1 ELSE 0 END -
             CASE WHEN t.had_text_in_price THEN 1 ELSE 0 END -
             CASE WHEN t.had_text_in_tax THEN 1 ELSE 0 END
@@ -148,16 +148,17 @@ final AS (
         
         CASE 
             WHEN NOT (t.had_transaction_id_prefix OR 
-                      t.is_missing_customer_id OR 
+                      t.is_missing_customer_id OR
+	       	      t.had_invalid_date OR
+	              t.had_product_id_prefix OR	
                       t.had_invalid_quantity OR 
                       t.had_text_in_price OR 
                       t.had_text_in_tax) THEN TRUE
             ELSE FALSE
         END AS is_clean_record,
         
-        -- ================================================================
         -- METADATA (Lineage and audit fields)
-        -- ================================================================
+        
         ingested_at AS source_ingested_at,
         t.source_file,
         t.pipeline_run_id,

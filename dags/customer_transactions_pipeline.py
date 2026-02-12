@@ -421,7 +421,7 @@ def generate_data_quality_report(**context):
                 {'type': 'range', 'column': 'quantity', 'min_value': 0},
                 {'type': 'range', 'column': 'unit_price', 'min_value': 0},
                 {'type': 'range', 'column': 'line_total', 'min_value': 0},
-                {'type': 'range', 'column': 'data_quality_score', 'min_value': 0, 'max_value': 5},
+                {'type': 'range', 'column': 'data_quality_score', 'min_value': 0, 'max_value': 7},
             ]
 
             fact_results = checker.run_quality_suite(
