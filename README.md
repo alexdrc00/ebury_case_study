@@ -13,13 +13,7 @@
 - [Architecture](#architecture)
 - [Key Features](#key-features)
 - [Data Model](#data-model)
-- [Quality Framework](#quality-framework)
-- [Project Structure](#project-structure)
-- [Usage Examples](#usage-examples)
-- [Testing](#testing)
 - [Monitoring](#monitoring)
-- [Technical Decisions](#technical-decisions)
-- [Future Enhancements](#future-enhancements)
 
 ---
 
