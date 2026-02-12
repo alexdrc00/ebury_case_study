@@ -66,15 +66,17 @@ flagged AS (
 			WHEN transaction_date IS NULL OR TRIM(transaction_date) = '' THEN TRUE
 			ELSE FALSE
 		END AS is_missing_transaction_date,
-		CASE
-			WHEN transaction_date IS NOT NULL
-			AND (
-				(transaction_date ~ '^\d{4}-\d{2}-\d{2}$' AND try_cast_date(transaction_date, 'YYYY-MM-DD') IS NULL)
-				OR (transaction_date ~ '^\d{2}-\d{2}-\d{4}$' AND try_cast_date(transaction_date, 'DD-MM-YYYY') IS NULL)
-				OR (transaction_date !~ '^\d{4}-\d{2}-\d{2}$' OR transaction_date !~ '^\d{2}-\d{2}-\d{4}$')
-			)
-			THEN TRUE
-			ELSE FALSE
+		CASE 
+		    -- 1. If it's NULL, it's not "invalid" per se, it's just missing (or handle as you prefer)
+		    WHEN transaction_date IS NULL THEN TRUE 
+
+		    -- 2. Check if it matches ANY valid pattern
+		    WHEN (transaction_date ~ '^\d{4}-\d{2}-\d{2}$' AND try_cast_date(transaction_date, 'YYYY-MM-DD') IS NOT NULL)
+		      OR (transaction_date ~ '^\d{2}-\d{2}-\d{4}$' AND try_cast_date(transaction_date, 'DD-MM-YYYY') IS NOT NULL)
+		    THEN FALSE  -- It's a valid date!
+
+		    -- 3. If it didn't meet the criteria above, it's invalid
+		    ELSE TRUE 
 		END AS had_invalid_date,
 
 		-- Product Issues
