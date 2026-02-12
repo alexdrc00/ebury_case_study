@@ -192,14 +192,14 @@ dim_customers─┼─fact_transactions─dim_products
 
 ### Table Descriptions
 
-| Table | Type | Grain | Row Count |
-|-------|------|-------|-----------|
-| `dim_customers` | Dimension | One per customer | ~11 |
-| `dim_products` | Dimension | One per product | 5 |
-| `dim_dates` | Dimension | One per date | ~25 |
-| `fact_transactions` | Fact | One per transaction | ~92 |
-| `monthly_customer_summary` | Aggregate | Customer-month | ~20 |
-| `product_performance` | Aggregate | Product-day | ~125 |
+| Table | Type | Grain |
+|-------|------|-------|
+| `dim_customers` | Dimension | One per customer |
+| `dim_products` | Dimension | One per product |
+| `dim_dates` | Dimension | One per date |
+| `fact_transactions` | Fact | One per transaction |
+| `monthly_customer_summary` | Aggregate | Customer-month |
+| `product_performance` | Aggregate | Product-day |
 
 ---
 
