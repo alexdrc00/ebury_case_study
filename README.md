@@ -17,8 +17,6 @@
 
 ---
 
----
-
 ## 🎯 Overview
 
 This project implements a production-grade data pipeline that:
