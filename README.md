@@ -54,6 +54,9 @@ cd customer-transactions-platform
 cp .env.example .env
 # Edit .env if needed
 
+# Generate aiflow key
+python3 utils/generate_fernet_key.py
+
 # 3. Start services
 docker-compose up -d
 
@@ -113,11 +116,6 @@ open http://localhost:8081
 | Containerization | Docker Compose | Environment management |
 | Language | Python 3.x | Pipeline logic |
 
-### Data Flow
-
-```
-```
-
 ### Pipeline Layers
 
 1. **Raw Layer** (`raw` schema)
@@ -140,42 +138,36 @@ open http://localhost:8081
 
 ## ✨ Key Features
 
-### 🔧 Platform Engineering
+### 🔧 Modules and Utilities
 
-- **Reusable Utilities**
+- **db_utils**
   - `DatabaseManager`: Consistent database operations
   - `DataQualityChecker`: Declarative quality validation
-  - Used across all DAG tasks
 
-- **Declarative Patterns**
-  - Quality checks defined as configuration
-  - Easy to extend and maintain
-  - Framework thinking over one-off scripts
+- **test_queries**
+  - Test queries to validate result
+  - Checks for completeness and integrity
+  - Extract business aggregates results
 
-- **Production Ready**
-  - Comprehensive error handling
-  - Detailed logging
-  - Idempotent operations
-  - Retry logic
+- **macros**
+  - `try_cast_date`: Handle possible MM-DD switch ups
+  - `try_cast_numeric`: Hnadle wrong numerics
 
 ### 📊 Data Quality
 
 **Handles Multiple Issues:**
+Example issues addressed:
 - ✅ Inconsistent date formats (DD-MM-YYYY → YYYY-MM-DD)
 - ✅ Text in numeric fields ("Two Hundred" → 200.00)
 - ✅ Missing values (NULL handling)
 - ✅ Invalid ID prefixes (T1010 → 1010)
 - ✅ Type conversions (TEXT → INTEGER/NUMERIC/DATE)
 
-**26+ Automated Checks:**
-- Raw layer: Completeness checks
-- Staging layer: 10 validation rules
-- Mart layer: 15 integrity checks
+**Automated Checks:**
+- Set up automated checks at all layers: raw -> staging -> mart
 
 **Quality Scoring:**
-- 0-5 scale per transaction
-- Tracks specific issues
-- Comprehensive reporting
+- 0-7 scale per transaction
 
 ### 🎯 Dimensional Modeling
 
@@ -217,85 +209,6 @@ dim_customers─┼─fact_transactions─dim_products
 | `monthly_customer_summary` | Aggregate | Customer-month | ~20 |
 | `product_performance` | Aggregate | Product-day | ~125 |
 
-### Sample Queries for Business Insights
-
-```sql
--- Top customers by revenue
-SELECT customer_name, total_revenue, customer_tier
-FROM mart.dim_customers
-WHERE NOT is_unknown_customer
-ORDER BY total_revenue DESC
-LIMIT 5;
-
--- Product performance
-SELECT product_name, total_revenue, performance_segment
-FROM mart.dim_products
-ORDER BY total_revenue DESC;
-
--- Monthly revenue trend
-SELECT year_month, SUM(total_revenue) as revenue
-FROM mart.monthly_customer_summary
-GROUP BY year_month
-ORDER BY year_month;
-```
-
----
-
-## 🔍 Quality Framework
-
-### Three-Layer Validation
-
-**Layer 1: Raw Data**
-- Row count validation
-- File integrity checks
-
-**Layer 2: Staging Data (10 checks)**
-- NOT NULL validations (transaction_id, product_id, etc.)
-- UNIQUE constraints (transaction_id)
-- RANGE checks (price: 0-10000, quantity: 0-100)
-- Calculated field integrity
-
-**Layer 3: Mart Data (15 checks)**
-- Foreign key integrity
-- Primary key uniqueness
-- Business rule validation
-- Referential integrity
-
-### Quality Metrics
-
-From recent run:
-```
-Total Checks Run: 26
-Passed: 24 ✓
-Failed: 2 ✗
-Pass Rate: 92.3%
-```
-
-**Known Issues (Expected):**
-- NULL customer_id values (8 transactions)
-- Invalid quantity values (3 transactions)
-
-These are tracked in `data_quality_score` and flagged for reporting.
-
----
-
-## 🧪 Testing
-
-### Test Coverage
-
-- **dbt Tests:** 130+ automated tests
-- **Quality Checks:** 26+ validations
-- **Coverage:** 100% of critical columns
-
-### Test Types
-
-- `not_null`: Column completeness
-- `unique`: Primary key integrity
-- `relationships`: Foreign key validity
-- `accepted_values`: Categorical constraints
-- `range`: Numeric bounds
-- Custom business rules
-
 ---
 
 ## 📈 Monitoring
@@ -325,96 +238,6 @@ ls -la dbt_project/logs/
 # View PostgreSQL logs
 docker-compose logs postgres
 ```
-
----
-
-## 🎨 Technical Decisions
-
-### Why DatabaseManager?
-
-**Problem:** Repetitive database code in every task
-**Solution:** Reusable utility with consistent patterns
-
-**Benefits:**
-- DRY code (Don't Repeat Yourself)
-- Easier testing and mocking
-- Consistent error handling
-- Platform thinking
-
-### Why DataQualityChecker?
-
-**Problem:** Manual SQL for each quality check
-**Solution:** Declarative check framework
-
-**Benefits:**
-- Easy to add new checks
-- Consistent validation patterns
-- Automatic aggregation
-- Reusable across DAGs
-
-### Why Star Schema?
-
-**Problem:** Need fast analytics queries
-**Solution:** Dimensional modeling with denormalization
-
-**Benefits:**
-- Simple join patterns
-- Query performance
-- Business-friendly structure
-- Standard pattern
-
-### Why dbt?
-
-**Problem:** Need SQL transformations with testing
-**Solution:** Modern data transformation tool
-
-**Benefits:**
-- SQL-based (accessible to analysts)
-- Built-in testing framework
-- Documentation generation
-- Version control friendly
-
----
-
-## 🔮 Future Enhancements
-
-### Short Term
-
-- [ ] Add incremental models for scale
-- [ ] Implement SCD Type 2 for dimensions
-- [ ] Add data freshness monitoring
-- [ ] Create Slack alerts for failures
-
-### Medium Term
-
-- [ ] Add more aggregate tables
-- [ ] Implement data lineage tracking
-- [ ] Add performance benchmarks
-- [ ] Create dbt macros for common patterns
-
-### Long Term
-
-- [ ] Add machine learning features
-- [ ] Implement data catalog
-- [ ] Add cost tracking
-- [ ] Create self-service analytics layer
-
----
-
-## 📊 Performance
-
-**Pipeline Metrics:**
-- Total runtime: ~5 minutes
-- Raw load: ~5 seconds (100 rows)
-- dbt staging: ~10 seconds
-- dbt mart: ~20 seconds
-- Quality checks: ~30 seconds
-
-**Optimization Opportunities:**
-- Incremental models (for larger datasets)
-- Parallel task execution
-- Connection pooling
-- Index optimization
 
 ---
 
